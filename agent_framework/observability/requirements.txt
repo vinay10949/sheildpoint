@@ -1,0 +1,15 @@
+# ShieldPoint Agent Framework — Python dependencies
+# Install with:  pip install -r agent_framework/observability/requirements.txt
+
+# Langfuse Python SDK — v2.x is API-compatible with both Langfuse v2.x and
+# v3.x self-hosted servers. Pin to >=2.0 per SHLD-9 AC.
+langfuse>=2.0,<4.0
+
+# OpenAI Python SDK — used to talk to LM Studio (OpenAI-compatible API)
+openai>=1.0,<2.0
+
+# HTTP client (used by test scripts for direct API probes)
+httpx>=0.25,<1.0
+
+# Pydantic for config validation (already pulled in by openai + langfuse)
+pydantic>=2.0,<3.0

@@ -1,0 +1,13 @@
+# Runtime dependencies (mirrors pyproject.toml [project.dependencies]).
+# Provided as a convenience for `pip install -r requirements.txt` in
+# environments that don't use pyproject-based installs.
+pydantic>=2.0,<3.0
+fastapi>=0.110,<1.0
+uvicorn[standard]>=0.27,<1.0
+python-multipart>=0.0.9,<1.0
+pytesseract>=0.3.10,<1.0
+Pillow>=10.0,<12.0
+pdf2image>=1.17,<2.0
+pypdf>=4.0,<7.0
+openai>=1.0,<2.0
+httpx>=0.25,<1.0

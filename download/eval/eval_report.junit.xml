@@ -1,0 +1,167 @@
+<?xml version='1.0' encoding='utf-8'?>
+<testsuites name="shieldpoint-agent-eval" tests="5" failures="0">
+  <testsuite name="shieldpoint-agent-eval" tests="5" failures="0" timestamp="2026-06-24T13:37:31.473026+00:00">
+    <testcase classname="decision" name="decision_accuracy" time="0.0" />
+    <testcase classname="severity" name="severity_accuracy" time="0.0" />
+    <testcase classname="claim_type" name="claim_type_accuracy" time="0.0" />
+    <testcase classname="fraud" name="fraud_f1" time="0.0" />
+    <testcase classname="payout" name="payout_within_10pct" time="0.0" />
+    <system-out>{
+  "generated_at": "2026-06-24T13:37:31.473026+00:00",
+  "total_claims": 750,
+  "decision": {
+    "accuracy": 0.8907,
+    "per_class": {
+      "approve": {
+        "precision": 0.9413,
+        "recall": 0.8892,
+        "f1": 0.9145,
+        "support": 397
+      },
+      "deny": {
+        "precision": 0.7949,
+        "recall": 0.8986,
+        "f1": 0.8435,
+        "support": 138
+      },
+      "route_to_manual_review": {
+        "precision": 0.8721,
+        "recall": 0.8884,
+        "f1": 0.8802,
+        "support": 215
+      }
+    },
+    "confusion_matrix": {
+      "approve": {
+        "approve": 353,
+        "deny": 23,
+        "route_to_manual_review": 21
+      },
+      "deny": {
+        "approve": 7,
+        "deny": 124,
+        "route_to_manual_review": 7
+      },
+      "route_to_manual_review": {
+        "approve": 15,
+        "deny": 9,
+        "route_to_manual_review": 191
+      }
+    }
+  },
+  "severity": {
+    "accuracy": 0.8533,
+    "per_class": {
+      "catastrophic": {
+        "precision": 0.4412,
+        "recall": 0.8108,
+        "f1": 0.5714,
+        "support": 37
+      },
+      "high": {
+        "precision": 0.8343,
+        "recall": 0.9125,
+        "f1": 0.8716,
+        "support": 160
+      },
+      "low": {
+        "precision": 0.9088,
+        "recall": 0.8646,
+        "f1": 0.8861,
+        "support": 288
+      },
+      "medium": {
+        "precision": 0.9227,
+        "recall": 0.8113,
+        "f1": 0.8635,
+        "support": 265
+      }
+    },
+    "confusion_matrix": {
+      "catastrophic": {
+        "catastrophic": 30,
+        "high": 2,
+        "low": 1,
+        "medium": 4
+      },
+      "high": {
+        "catastrophic": 4,
+        "high": 146,
+        "low": 6,
+        "medium": 4
+      },
+      "low": {
+        "catastrophic": 11,
+        "high": 18,
+        "low": 249,
+        "medium": 10
+      },
+      "medium": {
+        "catastrophic": 23,
+        "high": 9,
+        "low": 18,
+        "medium": 215
+      }
+    }
+  },
+  "claim_type": {
+    "accuracy": 0.9293,
+    "per_class": {
+      "auto": {
+        "precision": 0.9017,
+        "recall": 0.9336,
+        "f1": 0.9174,
+        "support": 226
+      },
+      "health": {
+        "precision": 0.8973,
+        "recall": 0.9225,
+        "f1": 0.9097,
+        "support": 142
+      },
+      "homeowners": {
+        "precision": 0.9595,
+        "recall": 0.9293,
+        "f1": 0.9441,
+        "support": 382
+      }
+    }
+  },
+  "fraud": {
+    "precision": 0.7556,
+    "recall": 0.7727,
+    "f1": 0.764,
+    "tp": 34,
+    "fp": 11,
+    "fn": 10,
+    "tn": 695
+  },
+  "payout": {
+    "mae": 224.37,
+    "rmse": 337.45,
+    "within_10pct": 0.468,
+    "within_25pct": 0.5467
+  },
+  "timeline": {
+    "days_to_settle_mae": 2.16,
+    "days_to_settle_rmse": 2.81
+  },
+  "source_distribution": {
+    "fallback": 34,
+    "llm": 636,
+    "hitl_escalation": 80
+  },
+  "confidence_stats": {
+    "mean": 0.752,
+    "min": 0.5509,
+    "max": 0.9496,
+    "count": 750
+  },
+  "regression": {
+    "passed": true,
+    "threshold": -0.05,
+    "regressions": []
+  }
+}</system-out>
+  </testsuite>
+</testsuites>

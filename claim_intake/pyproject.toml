@@ -1,0 +1,77 @@
+# =============================================================================
+# ShieldPoint Claim Intake Automation — Python package metadata
+# -----------------------------------------------------------------------------
+# Ticket: SP-203 — Implement Claim Intake Automation with OCR
+#
+# This package implements the automated claim intake pipeline that replaces
+# the manual 2.3-day process. Claims arrive via web portal (API), email
+# (IMAP polling), and fax (digitised PDF). Tesseract OCR extracts structured
+# data from fax/email attachments; the pipeline validates the extracted data
+# against required fields and routes invalid claims to a manual review queue.
+#
+# The package is a peer to `shieldpoint_agents/` (the downstream IntakeAgent
+# consumer). The contract between them is `StandardClaim` — see
+# `src/claim_intake/schemas.py`.
+# =============================================================================
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "shieldpoint-claim-intake"
+version = "0.1.0"
+description = "Automated claim intake pipeline for ShieldPoint — web portal, IMAP email polling, fax OCR with Tesseract, field validation, manual review queue."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "Proprietary — ShieldPoint internal" }
+authors = [{ name = "ShieldPoint ML Engineering" }]
+
+dependencies = [
+    "pydantic>=2.0,<3.0",         # claim schema + request validation
+    "fastapi>=0.110,<1.0",        # API server
+    "uvicorn[standard]>=0.27,<1.0",  # ASGI server
+    "python-multipart>=0.0.9,<1.0",  # for FastAPI file uploads
+    "pytesseract>=0.3.10,<1.0",   # Tesseract Python binding
+    "Pillow>=10.0,<12.0",         # image handling for OCR
+    "pdf2image>=1.17,<2.0",       # PDF rasterisation (wraps poppler)
+    "pypdf>=4.0,<7.0",            # text extraction from born-digital PDFs
+    "openai>=1.0,<2.0",           # optional LLM-assisted extraction (LM Studio)
+    "httpx>=0.25,<1.0",           # used by load test + health probes
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "pytest-asyncio>=0.21",
+    "respx>=0.20",
+    "reportlab>=4.0",             # for generating sample fax PDFs in tests
+]
+
+[project.urls]
+Repository = "https://github.com/vinay10949/sheildpoint"
+
+# -----------------------------------------------------------------------------
+# Setuptools src-layout discovery.
+# -----------------------------------------------------------------------------
+[tool.setuptools.packages.find]
+where = ["src"]
+
+# -----------------------------------------------------------------------------
+# pytest config.
+# -----------------------------------------------------------------------------
+[tool.pytest.ini_options]
+minversion = "7.0"
+testpaths = ["tests"]
+addopts = [
+    "-ra",
+    "--strict-markers",
+    "--cov=claim_intake",
+    "--cov-report=term-missing",
+]
+markers = [
+    "integration: end-to-end intake pipeline tests (web, email, fax)",
+    "slow: tests that take >1s (OCR, load test)",
+    "load: load tests (100 concurrent claims)",
+]

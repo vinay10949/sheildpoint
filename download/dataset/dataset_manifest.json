@@ -1,0 +1,78 @@
+{
+  "generator": "ShieldPoint Evaluation Dataset Generator",
+  "version": "1.0.0",
+  "generated_at": "2026-06-24T13:27:14.874293Z",
+  "random_seed": 42,
+  "total_claims": 5000,
+  "splits": {
+    "train": {
+      "count": 3500,
+      "sha256": "15d522297950bbfa5c2c19ebbc4ec8ff52944add86ecf75e7abf678df71c5ae5",
+      "path_csv": "train.csv",
+      "path_jsonl": "train.jsonl"
+    },
+    "val": {
+      "count": 750,
+      "sha256": "64e0a92b8c57bdc522404ebd6540ad4e3632afce1f5adeae87a90afe32fdc1ea",
+      "path_csv": "val.csv",
+      "path_jsonl": "val.jsonl"
+    },
+    "test": {
+      "count": 750,
+      "sha256": "802a86553b1fedb31bdb0a0f0f20ad11081af186b002b3c44f04a423921b522f",
+      "path_csv": "test.csv",
+      "path_jsonl": "test.jsonl"
+    }
+  },
+  "schema": [
+    "claim_id",
+    "policy_id",
+    "source_system",
+    "claimant_anon",
+    "claimant_email_anon",
+    "claimant_phone_anon",
+    "claimant_ssn_anon",
+    "claimant_address_anon",
+    "anonymization_hash",
+    "amount",
+    "deductible",
+    "coverage_limit",
+    "premium_annual",
+    "description",
+    "date_of_loss",
+    "reported_date",
+    "adjuster_id",
+    "documents",
+    "line_of_business",
+    "claim_type",
+    "claim_subtype",
+    "severity",
+    "fraud_flag",
+    "suspicious_pattern_flag",
+    "expected_decision",
+    "correct_payout_amount",
+    "days_to_first_contact",
+    "days_to_investigation_complete",
+    "days_to_settle",
+    "expected_severity",
+    "expected_claim_type",
+    "expected_fraud_flag",
+    "expected_payout_amount"
+  ],
+  "line_mix": {
+    "homeowners": 0.5,
+    "auto": 0.3,
+    "health": 0.2
+  },
+  "severity_mix": {
+    "low": 0.4,
+    "medium": 0.35,
+    "high": 0.2,
+    "catastrophic": 0.05
+  },
+  "decision_mix": {
+    "approve": 0.7,
+    "route_to_manual_review": 0.22,
+    "deny": 0.08
+  }
+}

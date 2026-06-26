@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+<!--
+  ShieldPoint override: force ClickHouse to listen on IPv4 only.
+
+  The official clickhouse-server image ships docker_related_config.xml with
+  <listen_host>::</listen_host> (IPv6 wildcard). When the container has IPv6
+  disabled, every listener (8123/9000/9009/...) fails to bind with:
+      Listen [::]:8123 failed: DNS error: EAI: Address family for hostname
+      not supported
+  ClickHouse then has no open ports, the wget healthcheck on :8123 gets
+  "connection refused", the container is marked unhealthy, and langfuse
+  (which depends_on it as service_healthy) never starts.
+
+  Overriding listen_host to 0.0.0.0 binds the IPv4 wildcard instead. Files in
+  /etc/clickhouse-server/config.d are merged last, replacing the image default.
+-->
+<clickhouse>
+    <listen_host>0.0.0.0</listen_host>
+</clickhouse>

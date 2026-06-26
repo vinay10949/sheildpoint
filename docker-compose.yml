@@ -1,0 +1,290 @@
+# =============================================================================
+# ShieldPoint — docker-compose.yml (unified)
+# -----------------------------------------------------------------------------
+# Single compose file for the entire ShieldPoint local stack:
+#
+#   • LM Studio agent framework (smoke-probe sidecar, future agent-api, claims-db, redis)
+#   • Langfuse observability stack (langfuse v2 + postgres 16 — Postgres-only;
+#     no ClickHouse / Redis / pgbouncer / S3. See the langfuse service for why.)
+#
+# Architecture:
+#
+#   LM Studio desktop app (Mac, port 1234)
+#         ▲
+#         │ http://host.docker.internal:1234/v1
+#         │
+#   ┌─────┴─────────────────────────────────────────────────────────────────┐
+#   │  shieldpoint-net  (Docker bridge, 172.28.0.0/16)                       │
+#   │                                                                        │
+#   │   [profile: smoke]                                                     │
+#   │     └── smoke-probe        (alpine sidecar for AC testing)             │
+#   │                                                                        │
+#   │   [profile: langfuse]                                                  │
+#   │     ├── langfuse           (v2 — web + API + worker, :3000)            │
+#   │     └── langfuse-postgres  (PostgreSQL 16, persistent volume —         │
+#   │                             stores ALL Langfuse data)                  │
+#   │                                                                        │
+#   │   [no profile — always on when present]                                │
+#   │     ├── agent-api          (future, Sprint 2)                          │
+#   │     ├── claims-db          (future, Sprint 2)                          │
+#   │     └── redis             (future, Sprint 2 — separate from langfuse) │
+#   └────────────────────────────────────────────────────────────────────────┘
+#                │
+#                │  127.0.0.1:3000  (UI bound to localhost only —
+#                │                  not exposed on external interfaces)
+#                ▼
+#         Mac host / browser
+#
+# Usage:
+#   docker compose --profile langfuse up -d             # Langfuse stack only
+#   docker compose --profile smoke up -d smoke-probe    # smoke sidecar only
+#   docker compose --profile langfuse --profile smoke up -d  # both
+#   docker compose down                                  # tear down (volumes kept)
+#
+# Single .env file (no .env.langfuse anymore):
+#   docker compose --profile langfuse --env-file .env up -d
+#   (Docker Compose auto-loads .env if present, so --env-file is optional.)
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# Named networks — single bridge for all services. Subnet 172.28.0.0/16
+# leaves 172.28.0.x for infra, 172.28.1.x for agents.
+# ---------------------------------------------------------------------------
+networks:
+  shieldpoint-net:
+    name: shieldpoint-net
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16
+          gateway: 172.28.0.1
+    labels:
+      - "shieldpoint.project=claims-automation"
+      - "shieldpoint.layer=all"
+
+# ---------------------------------------------------------------------------
+# Persistent volumes — survive `docker compose down` so traces are retained
+# for the 90-day retention policy (SHLD-9 AC).
+# ---------------------------------------------------------------------------
+volumes:
+  langfuse_pgdata:           # PostgreSQL 16 data — Langfuse v2 stores ALL data here
+
+services:
+  # ===========================================================================
+  # PROFILE: smoke
+  # ===========================================================================
+  # Smoke-test sidecar — used by `make smoke` to verify container-to-host-LM
+  # -Studio reachability. Stays stopped outside smoke tests; no GPU, no volumes.
+  #
+  # This is the container that PROVES the SP-100 AC:
+  #   "API accessible from agent framework containers via Docker network"
+  # ===========================================================================
+  smoke-probe:
+    image: alpine:3.20
+    container_name: shieldpoint-smoke-probe
+    networks:
+      - shieldpoint-net
+    # `extra_hosts` adds an /etc/hosts entry inside the container:
+    #   host.docker.internal  →  host gateway IP
+    # On Docker Desktop (Mac), this DNS already resolves natively, but adding
+    # it explicitly makes the compose file portable to Linux Docker Engine.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      - LM_STUDIO_URL=http://host.docker.internal:1234
+      - LM_STUDIO_MODEL=${QWEN_MODEL_ID:-qwen3.6-35b-a3b-q4_k_m}
+    command: ["sleep", "infinity"]
+    restart: "no"
+    profiles: ["smoke"]
+
+  # ===========================================================================
+  # PROFILE: langfuse
+  # ===========================================================================
+  # Langfuse v2 — web UI + API + worker in one container, PostgreSQL-only.
+  # Exposes :3000 bound to 127.0.0.1 ONLY (no external interface exposure).
+  #
+  # Why v2 (not v3): Langfuse v3 hard-requires ClickHouse AND an S3-compatible
+  # bucket for event uploads (no local-disk fallback — boot fails with
+  # "LANGFUSE_S3_EVENT_UPLOAD_BUCKET ... expected string, received undefined").
+  # That conflicts with this stack's no-blob-storage / data-sovereignty design.
+  # v2 stores everything in Postgres — no ClickHouse, Redis, pgbouncer, or S3.
+  # See https://langfuse.com/self-hosting/v2/deployment-guide
+  # ===========================================================================
+  langfuse:
+    image: langfuse/langfuse:2
+    container_name: shieldpoint-langfuse
+    networks: [shieldpoint-net]
+    depends_on:
+      langfuse-postgres:
+        condition: service_healthy
+    # CRITICAL (SHLD-43 data sovereignty): bind to 127.0.0.1 so the port is
+    # NOT exposed on the host's external interfaces. Only the Mac host's
+    # loopback can reach the UI/API. Agent containers reach Langfuse via the
+    # internal shieldpoint-net DNS name `langfuse:3000`.
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      # ---- Database (direct connection; v2 stores ALL data in Postgres) ----
+      # Connect straight to Postgres — no pgbouncer. v2 is a single local
+      # instance, and Prisma migrations take a session-scoped pg_advisory_lock()
+      # that cannot work through a transaction-mode pooler.
+      - DATABASE_URL=postgresql://${LANGFUSE_DB_USER:-langfuse}:${LANGFUSE_DB_PASSWORD}@langfuse-postgres:5432/langfuse
+      # ---- Auth / crypto ----
+      - NEXTAUTH_URL=${LANGFUSE_NEXTAUTH_URL:-http://localhost:3000}
+      - NEXTAUTH_SECRET=${LANGFUSE_NEXTAUTH_SECRET}
+      - SALT=${LANGFUSE_SALT}
+      - ENCRYPTION_KEY=${LANGFUSE_ENCRYPTION_KEY}
+      # ---- Data sovereignty: disable ALL outbound telemetry ----
+      - TELEMETRY_ENABLED=false
+      - LANGFUSE_ENABLE_TELEMETRY=false
+      # ---- Signups: admin-only (operator creates accounts via UI) ----
+      - NEXT_PUBLIC_SIGN_UP_DISABLED=true
+      - ENABLE_SIGN_UP=false
+      # ---- Logging ----
+      - LANGFUSE_LOG_LEVEL=${LANGFUSE_LOG_LEVEL:-info}
+      # ---- Experimental features OFF for production stability ----
+      - LANGFUSE_ENABLE_EXPERIMENTAL_FEATURES=false
+    restart: unless-stopped
+    healthcheck:
+      # The Langfuse image is a Next.js standalone build that binds to $HOSTNAME
+      # (the container ID → the container's own IP), NOT to loopback. So a
+      # healthcheck against localhost/127.0.0.1 gets "connection refused" even
+      # though the app is healthy. Target the container's routable IP via
+      # `hostname -i` instead. (Host + other containers reach it fine via the
+      # published port and the `langfuse:3000` service DNS name, respectively.)
+      test: ["CMD-SHELL", "wget -qO- http://$$(hostname -i):3000/api/public/health >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 60s
+    profiles: ["langfuse"]
+    labels:
+      - "shieldpoint.project=claims-automation"
+      - "shieldpoint.layer=observability"
+      - "shieldpoint.service=langfuse"
+
+  # ===========================================================================
+  # PostgreSQL 16 — Langfuse metadata store (users, projects, API keys,
+  # trace indexes, scores, prompts). Bound to internal network only.
+  # ===========================================================================
+  langfuse-postgres:
+    image: postgres:16-alpine
+    container_name: shieldpoint-langfuse-db
+    networks: [shieldpoint-net]
+    environment:
+      - POSTGRES_USER=${LANGFUSE_DB_USER:-langfuse}
+      - POSTGRES_PASSWORD=${LANGFUSE_DB_PASSWORD}
+      - POSTGRES_DB=langfuse
+      - PGDATA=/var/lib/postgresql/data
+    volumes:
+      - langfuse_pgdata:/var/lib/postgresql/data
+    # No `ports:` mapping — postgres is reachable ONLY on the internal network.
+    # (For emergency admin access, expose temporarily with:
+    #   docker run --rm -it --network shieldpoint-net postgres:16-alpine \
+    #     psql -h langfuse-postgres -U langfuse -d langfuse)
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${LANGFUSE_DB_USER:-langfuse} -d langfuse"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+    profiles: ["langfuse"]
+    labels:
+      - "shieldpoint.project=claims-automation"
+      - "shieldpoint.layer=observability"
+      - "shieldpoint.service=postgres"
+
+  # ===========================================================================
+  # Future services (Sprint 2+) — placeholders documented here so the network
+  # topology is visible. Uncomment and extend when those tickets land.
+  # ===========================================================================
+  #
+  # agent-api:
+  #   image: shieldpoint/agent-api:0.1.0
+  #   container_name: shieldpoint-agent-api
+  #   networks: [shieldpoint-net]
+  #   extra_hosts:
+  #     - "host.docker.internal:host-gateway"
+  #   environment:
+  #     # Inside the container, reach LM Studio via host.docker.internal:
+  #     - LM_STUDIO_BASE_URL=http://host.docker.internal:1234/v1
+  #     - LM_STUDIO_API_KEY=${LM_STUDIO_API_KEY:-lm-studio}
+  #     - LM_STUDIO_MODEL=${QWEN_MODEL_ID:-qwen3.6-35b-a3b-q4_k_m}
+  #     # Langfuse tracer config (sends traces to internal Langfuse):
+  #     - LANGFUSE_HOST=http://langfuse:3000
+  #     - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY}
+  #     - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY}
+  #   ports:
+  #     - "8000:8000"
+  #   depends_on:
+  #     - claims-db
+  #     - redis
+  #
+  # claims-db:
+  #   image: postgres:16
+  #   container_name: shieldpoint-claims-db
+  #   networks: [shieldpoint-net]
+  #   environment:
+  #     - POSTGRES_USER=claims
+  #     - POSTGRES_PASSWORD=${CLAIMS_DB_PW}
+  #     - POSTGRES_DB=shieldpoint_claims
+  #   volumes:
+  #     - claims_pgdata:/var/lib/postgresql/data
+  #   ports: ["5433:5432"]
+  #
+  # redis:
+  #   image: redis:7.2-alpine
+  #   container_name: shieldpoint-redis
+  #   networks: [shieldpoint-net]
+  #   volumes:
+  #     - redis_data:/data
+  #   ports: ["6379:6379"]
+
+  # ===========================================================================
+  # PROFILE: intake  (SP-203 — Claim Intake Automation with OCR)
+  # ===========================================================================
+  # Claim intake service: web portal API + IMAP email poller + fax OCR
+  # pipeline. Connects to LM Studio for optional LLM-assisted extraction.
+  #
+  # Built from claim_intake/Dockerfile. Requires tesseract-ocr and
+  # poppler-utils on the image.
+  # ===========================================================================
+  claim-intake:
+    build:
+      context: ./claim_intake
+      dockerfile: Dockerfile
+    container_name: shieldpoint-claim-intake
+    networks: [shieldpoint-net]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      # API server
+      - INTAKE_API_HOST=0.0.0.0
+      - INTAKE_API_PORT=8001
+      # Optional LLM for assisted field extraction (falls back to regex-only)
+      - LM_STUDIO_BASE_URL=http://host.docker.internal:1234/v1
+      - LM_STUDIO_API_KEY=${LM_STUDIO_API_KEY:-lm-studio}
+      - QWEN_MODEL_ID=${QWEN_MODEL_ID:-qwen3.6-35b-a3b-q4_k_m}
+      # IMAP polling (disabled by default; enable in prod)
+      - INTAKE_IMAP_ENABLED=${INTAKE_IMAP_ENABLED:-false}
+      - INTAKE_IMAP_HOST=${INTAKE_IMAP_HOST:-}
+      - INTAKE_IMAP_PORT=${INTAKE_IMAP_PORT:-993}
+      - INTAKE_IMAP_USER=${INTAKE_IMAP_USER:-}
+      - INTAKE_IMAP_PASSWORD=${INTAKE_IMAP_PASSWORD:-}
+      - INTAKE_IMAP_MAILBOX=${INTAKE_IMAP_MAILBOX:-INBOX}
+      - INTAKE_IMAP_POLL_INTERVAL=${INTAKE_IMAP_POLL_INTERVAL:-60}
+    ports:
+      - "8001:8001"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8001/health',timeout=2).status==200 else 1)\""]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    profiles: ["intake"]
+    labels:
+      - "shieldpoint.project=claims-automation"
+      - "shieldpoint.layer=intake"
+      - "shieldpoint.service=claim-intake"
