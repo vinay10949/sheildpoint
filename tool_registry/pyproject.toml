@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "shieldpoint-tool-registry"
+version = "0.1.0"
+description = "ShieldPoint Tool Registry — standardized interface between the agent and external systems (SP-201)"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "Proprietary — ShieldPoint Insurance" }
+authors = [{ name = "ShieldPoint ML Engineering" }]
+dependencies = [
+    "jsonschema>=4.0.0",
+]
+
+[project.optional-dependencies]
+langfuse = ["langfuse>=2.0.0"]
+postgres = ["psycopg2-binary>=2.9.0", "SQLAlchemy>=2.0.0"]
+test = ["pytest>=7.0.0", "pytest-cov>=4.0.0"]
+all = [
+    "langfuse>=2.0.0",
+    "psycopg2-binary>=2.9.0",
+    "SQLAlchemy>=2.0.0",
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+]
+
+[tool.setuptools.packages.find]
+include = ["shieldpoint*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"
+filterwarnings = [
+    "error::DeprecationWarning",
+    "ignore::DeprecationWarning:langfuse.*",
+]

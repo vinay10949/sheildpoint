@@ -1,0 +1,24 @@
+# ShieldPoint Tool Registry — runtime dependencies
+#
+# The registry is intentionally lightweight. The only hard runtime dep is
+# jsonschema (for parameter validation). All other deps are optional:
+#
+# - langfuse      : only required for live Langfuse span shipping
+# - psycopg2      : only required for the PostgreSQL repository impl (SP-202)
+# - pydantic      : only required if you want to reuse the existing
+#                   shieldpoint_agents schemas
+
+jsonschema>=4.0.0
+
+# --- Optional: live Langfuse span shipping -------------------------------
+# Install with: pip install -r requirements-langfuse.txt
+# langfuse>=2.0.0
+
+# --- Optional: PostgreSQL repositories (SP-202) --------------------------
+# Install with: pip install -r requirements-postgres.txt
+# psycopg2-binary>=2.9.0
+# SQLAlchemy>=2.0.0
+
+# --- Test dependencies ---------------------------------------------------
+pytest>=7.0.0
+pytest-cov>=4.0.0
