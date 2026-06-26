@@ -1,0 +1,72 @@
+# =============================================================================
+# ShieldPoint Agent Framework — docker-compose override
+# -----------------------------------------------------------------------------
+# Ticket: SHLD-13 — "Dockerfile builds agent container with all dependencies,
+# connects to LM Studio and Langfuse."
+#
+# This is an OVERRIDE file. Use it together with the repo's main
+# docker-compose.yml:
+#
+#   docker compose -f docker-compose.yml -f shieldpoint_agents/docker-compose.agent.yml \
+#       --profile langfuse --profile agent up -d
+#
+# It adds the `agent-api` service to the existing `shieldpoint-net` network.
+# The agent container reaches:
+#
+#   - LM Studio via http://host.docker.internal:1234/v1  (Mac host loopback)
+#   - Langfuse  via http://langfuse:3000                  (internal DNS name)
+#
+# No new networks or volumes are defined — those live in docker-compose.yml.
+# =============================================================================
+
+services:
+  agent-api:
+    build:
+      context: ..
+      dockerfile: shieldpoint_agents/Dockerfile
+    image: shieldpoint/agent-api:0.1.0
+    container_name: shieldpoint-agent-api
+    networks:
+      - shieldpoint-net
+    # `host.docker.internal` resolves to the Mac host's loopback on Docker
+    # Desktop. On Linux Docker Engine, the `extra_hosts` line below adds an
+    # /etc/hosts entry pointing at the host gateway IP.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      # ---- LM Studio inference endpoint -----------------------------------
+      - LM_STUDIO_BASE_URL=http://host.docker.internal:1234/v1
+      - LM_STUDIO_API_KEY=${LM_STUDIO_API_KEY:-lm-studio}
+      - QWEN_MODEL_ID=${QWEN_MODEL_ID:-qwen3.6-35b-a3b-q4_k_m}
+      - LLM_TIMEOUT_SEC=${LLM_TIMEOUT_SEC:-10}
+      - MAX_REACT_ITERATIONS=${MAX_REACT_ITERATIONS:-5}
+      - LLM_TEMPERATURE=${LLM_TEMPERATURE:-0.1}
+      # ---- Langfuse tracer -------------------------------------------------
+      # Inside the container, talk to Langfuse via its internal DNS name.
+      - LANGFUSE_HOST=http://langfuse:3000
+      - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY:-}
+      - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY:-}
+      - LANGFUSE_ENABLED=${LANGFUSE_ENABLED:-true}
+      # ---- App metadata ----------------------------------------------------
+      - SHIELDPOINT_ENV=${SHIELDPOINT_ENV:-production}
+      - SHIELDPOINT_LOG_LEVEL=${SHIELDPOINT_LOG_LEVEL:-INFO}
+    ports:
+      # Bind to 127.0.0.1 only — same data-sovereignty rule as Langfuse.
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      # We don't strictly require Langfuse to be up (tracing no-ops if it's
+      # down), but starting them together is the common case.
+      langfuse:
+        condition: service_started
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8000/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    profiles: ["agent"]
+    labels:
+      - "shieldpoint.project=claims-automation"
+      - "shieldpoint.layer=agent"
+      - "shieldpoint.service=agent-api"

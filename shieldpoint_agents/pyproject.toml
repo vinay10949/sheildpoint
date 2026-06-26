@@ -1,0 +1,78 @@
+# =============================================================================
+# ShieldPoint Agent Framework — Python package metadata
+# -----------------------------------------------------------------------------
+# Ticket: SHLD-13 — Scaffold Base Agent Framework with Langfuse Integration
+#
+# Installs the `shieldpoint_agents` Python package (src/ layout) plus dev
+# dependencies for running pytest. The package reuses the existing
+# `agent_framework.observability.ShieldPointTracer` (from ../agent_framework/)
+# — that path is added to sys.path at runtime via the .pth file installed by
+# this package, so the legacy tracer stays importable without being re-published
+# as a separate distribution.
+# =============================================================================
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "shieldpoint-agents"
+version = "0.1.0"
+description = "Base agent framework for ShieldPoint claims automation — ReAct loop, Langfuse tracing, tool registry, fallback engine."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "Proprietary — ShieldPoint internal" }
+authors = [{ name = "ShieldPoint ML Engineering" }]
+
+# Runtime deps mirror agent_framework/observability/requirements.txt and add
+# JSON-schema validation (for ToolRegistry) + Pydantic v2 (for structured
+# ReAct output parsing). pyyaml is included so the optional FastAPI demo
+# service can mount config files. All packages are pure-Python and OS-agnostic.
+dependencies = [
+    "openai>=1.0,<2.0",          # LM Studio OpenAI-compatible client
+    "langfuse>=2.0,<4.0",        # tracing SDK (v3 self-hosted compatible)
+    "pydantic>=2.0,<3.0",        # structured ReAct output schemas
+    "jsonschema>=4.0,<5.0",      # ToolRegistry parameter validation
+    "httpx>=0.25,<1.0",          # used by tests + LM Studio health probes
+    "PyYAML>=6.0,<7.0",          # optional config files
+    "tenacity>=8.0,<10.0",       # retry/backoff for LLM calls
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "pytest-asyncio>=0.21",
+    "respx>=0.20",               # mock httpx for LM Studio tests
+]
+api = [
+    "fastapi>=0.110,<1.0",
+    "uvicorn[standard]>=0.27,<1.0",
+]
+
+[project.urls]
+Repository = "https://github.com/vinay10949/sheildpoint"
+
+# -----------------------------------------------------------------------------
+# Setuptools src-layout discovery.
+# -----------------------------------------------------------------------------
+[tool.setuptools.packages.find]
+where = ["src"]
+
+# -----------------------------------------------------------------------------
+# pytest config — discover tests in ./tests, measure coverage of the package.
+# -----------------------------------------------------------------------------
+[tool.pytest.ini_options]
+minversion = "7.0"
+testpaths = ["tests"]
+addopts = [
+    "-ra",
+    "--strict-markers",
+    "--cov=shieldpoint_agents",
+    "--cov-report=term-missing",
+    "--cov-report=html:htmlcov",
+]
+markers = [
+    "integration: end-to-end ReAct cycle tests (may use mocks for LM Studio)",
+    "slow: tests that take >1s",
+]
